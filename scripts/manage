@@ -1,0 +1,133 @@
+#!/usr/bin/ruby
+
+require "etc"
+require "securerandom"
+require "fileutils"
+require "json"
+
+$levels_passwords = File.join("/home", "op", "levels-passwords")
+$win_msg = """
+Congratulations, you've defeat the last level :)
+"""
+
+def error(msg)
+  puts("Error: #{msg}")
+  exit(-1)
+end
+
+def create_file(path, content, owner, group, perms)
+  File.open(path, "w") { |f| f.write(content) }
+  FileUtils.chown(owner, group, path)
+  FileUtils.chmod(perms, path)
+end
+
+def create_user(username, home)
+  error("Invalid username") if username.nil?
+  username = username.to_s
+
+  level_exists = false
+  Etc.passwd { |user| level_exists = true if user.name.to_s == username }
+  system("/usr/sbin/useradd -m '#{username}'") unless level_exists
+  set_perms(home, 0700, 0600)
+end
+
+def set_perms(base_dir, dir_perms, file_perms)
+  error("Invalid base directory") if base_dir.nil? || !File.directory?(base_dir)
+  error("Invalid directory permissions") if dir_perms.nil?
+  dir_perms = dir_perms.is_a?(Fixnum) ? dir_perms : to_i(8)
+  error("Invalid directory permissions") if dir_perms.nil? || dir_perms <= 0 || dir_perms > 0777
+  error("Invalid file permissions") if file_perms.nil?
+  dir_perms = file_perms.is_a?(Fixnum) ? file_perms : to_i(8)
+  error("Invalid file permissions") if file_perms.nil? || file_perms <= 0 || file_perms > 0777
+
+  Dir.glob(File.join(base_dir, "**", "*"), File::FNM_DOTMATCH) do |f|
+    if File.directory? f
+      FileUtils.chmod(dir_perms, f)
+    elsif File.file? f
+      FileUtils.chmod(file_perms, f)
+    end
+  end
+end
+
+def reset_levels_passwords(levels=nil)
+  if File.file? $levels_passwords
+    passwords = JSON.parse(File.read($levels_passwords))
+  else
+    passwords = {}
+  end
+
+  found = false
+  Etc.passwd { |user|
+    if user.name =~ /^level-[0-9]+$/
+      if levels.nil? || Array(levels).include?(user.name)
+        found = true
+        passwords[user.name] = SecureRandom.base64(12)
+        puts("Resetting password for '#{user.name}' to '#{passwords[user.name]}'")
+        system("echo '#{user.name}:#{passwords[user.name]}' | /usr/sbin/chpasswd")
+      end
+    end
+  }
+  error("Failed to reset password for non-existing user(s) '#{Array(levels).join(", ")}'") unless found
+
+  create_file($levels_passwords, passwords.to_json, "op", "op", 0400)
+end
+
+def get_level_password(level)
+  error("No level provided") unless level
+  level = sprintf("%03d", level)
+  level = "level-#{level}"
+
+  levels_passwords = JSON.parse(File.read($levels_passwords))
+
+  if levels_passwords.has_key?(level)
+    levels_passwords[level]
+  else
+    error("Level '#{level}' doesn't exist")
+  end
+end
+
+def create_level(level)
+  error("No level provided") unless level
+  level_number = Integer(level)
+  error("Invalid level") if level_number <= 0
+
+  prev_level_number = level_number - 1
+  prev_level_name = sprintf("%03d", prev_level_number)
+  prev_username = "level-#{prev_level_name}"
+  prev_home = File.join("/home", prev_username)
+
+  level_name = sprintf("%03d", level_number)
+  username = "level-#{level_name}"
+  home = File.join("/home", username)
+
+  create_user(username, home)
+  reset_levels_passwords(username)
+
+  if prev_level_number > 0
+    create_file(File.join(prev_home, "#{level_name}-password"),
+                get_level_password(level_name), username, username, 0400)
+    FileUtils.rm(File.join(prev_home, "win")) if File.file? File.join(prev_home, "win")
+  end
+
+  create_file(File.join(home, "win"), $win_msg, username, username, 0400)
+end
+
+def main
+  error("root permission is required!") unless Process::UID.eid == 0
+
+  actions = {
+    set_perms:      lambda { set_perms(ARGV[1], ARGV[2], ARGV[3]) },
+    create_lvl:     lambda { create_level(ARGV[1]) },
+    reset_lvls_pwd: lambda { reset_levels_passwords(ARGV[1]) }
+  }
+
+  error("Action name is mandatory (first argument). Available actions: #{actions.keys.join(", ")}") unless ARGV[0]
+  action = actions[ARGV[0].to_sym]
+  if action
+    action.call
+  else
+    error("Action '#{ARGV[0]}' is not available. Available actions: #{actions.keys.join(", ")}")
+  end
+end
+
+main
