@@ -5,7 +5,7 @@ require "securerandom"
 require "fileutils"
 require "json"
 
-$levels_passwords = File.join("/home", "op", "levels-passwords")
+$levels_passwords = "/usr/share/levels-passwords"
 $win_msg = """
 Congratulations, you've defeat the last level :)
 """
@@ -69,7 +69,7 @@ def reset_levels_passwords(levels=nil)
   }
   error("Failed to reset password for non-existing user(s) '#{Array(levels).join(", ")}'") unless found
 
-  create_file($levels_passwords, passwords.to_json, "op", "op", 0400)
+  create_file($levels_passwords, passwords.to_json, "root", "root", 0400)
 end
 
 def get_level_password(level)
