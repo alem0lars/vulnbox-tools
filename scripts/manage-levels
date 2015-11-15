@@ -5,10 +5,9 @@ require "securerandom"
 require "fileutils"
 require "json"
 
-$levels_passwords = "/usr/share/levels-passwords"
-$win_msg = """
-Congratulations, you've defeat the last level :)
-"""
+$levels_passwords   = "/usr/share/levels-passwords"
+$levels_admin_group = "levels-admin"
+$win_msg = "Congratulations, you've defeat the last level :)"
 
 def error(msg)
   puts("Error: #{msg}")
@@ -29,6 +28,12 @@ def create_user(username, home)
   Etc.passwd { |user| level_exists = true if user.name.to_s == username }
   system("/usr/sbin/useradd -m '#{username}'") unless level_exists
   set_perms(home, 0700, 0600)
+end
+
+def create_group(groupname)
+  error("Invalid group") if groupname.nil?
+  groupname = groupname.to_s
+  Etc.getgrnam(groupname) rescue system("/usr/sbin/groupadd '#{groupname}'")
 end
 
 def set_perms(base_dir, dir_perms, file_perms)
@@ -67,9 +72,12 @@ def reset_levels_passwords(levels=nil)
       end
     end
   }
-  error("Failed to reset password for non-existing user(s) '#{Array(levels).join(", ")}'") unless found
+  error("Password reset fail for non-existing user(s) " \
+        "'#{Array(levels).join(", ")}'") unless found
 
-  create_file($levels_passwords, passwords.to_json, "root", "root", 0400)
+  create_group($levels_admin_group)
+  create_file($levels_passwords, passwords.to_json,
+              "root", $levels_admin_group, 0440)
 end
 
 def get_level_password(level)
