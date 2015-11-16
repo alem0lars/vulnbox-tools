@@ -5,8 +5,8 @@ require "securerandom"
 require "fileutils"
 require "json"
 
-$levels_passwords   = "/usr/share/levels-passwords"
-$levels_admin_group = "levels-admin"
+$levels_passwords   = "/usr/share/levelspasswords"
+$levels_admin_group = "levelsadmin"
 $win_msg = "Congratulations, you've defeat the last level :)"
 
 def error(msg)
@@ -27,7 +27,8 @@ def create_user(username, home)
   level_exists = false
   Etc.passwd { |user| level_exists = true if user.name.to_s == username }
   system("/usr/sbin/useradd -m '#{username}'") unless level_exists
-  set_perms(home, 0700, 0600)
+  FileUtils.chown(username, $levels_admin_group, home)
+  set_perms(home, 0750, 0600)
 end
 
 def create_group(groupname)
@@ -38,11 +39,13 @@ end
 
 def set_perms(base_dir, dir_perms, file_perms)
   error("Invalid base directory") if base_dir.nil? || !File.directory?(base_dir)
+
   error("Invalid directory permissions") if dir_perms.nil?
   dir_perms = dir_perms.is_a?(Fixnum) ? dir_perms : to_i(8)
   error("Invalid directory permissions") if dir_perms.nil? || dir_perms <= 0 || dir_perms > 0777
+
   error("Invalid file permissions") if file_perms.nil?
-  dir_perms = file_perms.is_a?(Fixnum) ? file_perms : to_i(8)
+  file_perms = file_perms.is_a?(Fixnum) ? file_perms : to_i(8)
   error("Invalid file permissions") if file_perms.nil? || file_perms <= 0 || file_perms > 0777
 
   Dir.glob(File.join(base_dir, "**", "*"), File::FNM_DOTMATCH) do |f|
