@@ -28,7 +28,7 @@ def create_user(username, home)
   Etc.passwd { |user| level_exists = true if user.name.to_s == username }
   system("/usr/sbin/useradd -m '#{username}'") unless level_exists
   FileUtils.chown(username, $levels_admin_group, home)
-  set_perms(home, 0750, 0600)
+  set_perms(home, 0755, 0600)
 end
 
 def create_group(groupname)
