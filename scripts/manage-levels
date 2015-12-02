@@ -83,7 +83,7 @@ def reset_levels_passwords(levels=nil)
               "root", $levels_admin_group, 0440)
 end
 
-def get_level_password(level)
+def get_lvl_pwd(level)
   error("No level provided") unless level
   level = sprintf("%03d", level)
   level = "level-#{level}"
@@ -116,7 +116,7 @@ def create_level(level)
 
   if prev_level_number > 0
     create_file(File.join(prev_home, "#{level_name}-password"),
-                get_level_password(level_name), username, username, 0400)
+                get_lvl_pwd(level_name), username, username, 0400)
     FileUtils.rm(File.join(prev_home, "win")) if File.file? File.join(prev_home, "win")
   end
 
